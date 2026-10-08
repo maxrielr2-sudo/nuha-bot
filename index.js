@@ -26,7 +26,6 @@ REGLAS DE FORMATO Y LONGITUD (ESTRICTAS):
 - No hagas análisis profundos ni explicaciones enciclopédicas a menos que te lo pidan explícitamente.
 - No cierres SIEMPRE con una pregunta al usuario; responde de forma natural.`;
 
-// Lista priorizada de modelos de respaldo
 const MODELS_TO_TRY = [
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
@@ -40,18 +39,32 @@ client.once('ready', () => {
 });
 
 client.on('messageCreate', async (message) => {
-  // Ignorar si el mensaje proviene de un bot o no contiene texto
   if (message.author.bot || !message.content) return;
 
-  // FILTRO: Solo responder si el mensaje menciona directamente al bot (@Nuha)
+  // Solo responder si mencionan a @Nuha
   if (!message.mentions.has(client.user)) return;
-
-  // Remueve la mención (@Nuha) para enviar solo la consulta limpia a Gemini
-  const cleanPrompt = message.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
-  if (!cleanPrompt) return; // Si la mención no tiene texto adicional, se ignora
 
   try {
     await message.channel.sendTyping();
+
+    // 1. Obtener los últimos 6 mensajes del canal para construir el contexto
+    const rawMessages = await message.channel.messages.fetch({ limit: 6 });
+    const sortedMessages = Array.from(rawMessages.values()).reverse();
+
+    // 2. Formatear el historial para enviárselo a Gemini
+    const history = sortedMessages.map((msg) => {
+      const role = msg.author.id === client.user.id ? 'model' : 'user';
+      // Limpiar menciones para no ensuciar el texto
+      const cleanContent = msg.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
+      return {
+        role: role,
+        parts: [{ text: `${msg.author.username}: ${cleanContent}` }],
+      };
+    });
+
+    // 3. El último mensaje del usuario
+    const cleanPrompt = message.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
+    if (!cleanPrompt) return;
 
     let replyText = '';
 
@@ -62,7 +75,12 @@ client.on('messageCreate', async (message) => {
           systemInstruction: SYSTEM_PROMPT
         });
 
-        const result = await model.generateContent(cleanPrompt);
+        // Iniciamos el chat pasándole el historial de los últimos mensajes
+        const chat = model.startChat({
+          history: history.slice(0, -1), // Pasamos los mensajes anteriores
+        });
+
+        const result = await chat.sendMessage(cleanPrompt);
         replyText = result.response.text();
 
         if (replyText) {
@@ -70,7 +88,7 @@ client.on('messageCreate', async (message) => {
           break;
         }
       } catch (err) {
-        console.warn(`⚠️ Modelo ${modelName} falló, probando siguiente...`);
+        console.warn(`⚠️ Modelo ${modelName} falló en chat, probando siguiente...`, err.message);
       }
     }
 
@@ -83,7 +101,6 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Servidor HTTP para mantener activo el Health Check de Render
 http.createServer((req, res) => res.end('Nuha está viva')).listen(process.env.PORT || 3000);
 
 client.login(process.env.DISCORD_TOKEN);
