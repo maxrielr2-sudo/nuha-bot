@@ -25,6 +25,15 @@ REGLAS DE FORMATO Y LONGITUD (ESTRICTAS):
 - No hagas análisis profundos ni explicaciones enciclopédicas a menos que te lo pidan explícitamente.
 - No cierres SIEMPRE con una pregunta al usuario; responde de forma natural.`;
 
+// Lista priorizada de modelos
+const MODELS_TO_TRY = [
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-flash-latest'
+];
+
 client.once('ready', () => {
   console.log(`🤖 Nuha está en línea como ${client.user.tag}`);
 });
@@ -35,19 +44,35 @@ client.on('messageCreate', async (message) => {
   try {
     await message.channel.sendTyping();
 
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
-      systemInstruction: SYSTEM_PROMPT
-    });
+    let replyText = '';
 
-    const result = await model.generateContent(message.content);
-    const replyText = result.response.text();
+    for (const modelName of MODELS_TO_TRY) {
+      try {
+        const model = genAI.getGenerativeModel({ 
+          model: modelName,
+          systemInstruction: SYSTEM_PROMPT
+        });
+
+        const result = await model.generateContent(message.content);
+        replyText = result.response.text();
+
+        if (replyText) {
+          console.log(`✅ Respondido con éxito usando: ${modelName}`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`⚠️ Modelo ${modelName} falló, probando siguiente...`);
+      }
+    }
 
     if (replyText) {
       await message.reply(replyText);
+    } else {
+      console.error('❌ Ninguno de los modelos pudo responder.');
     }
+
   } catch (error) {
-    console.error('❌ Error detallado al generar respuesta:', error);
+    console.error('❌ Error general:', error);
   }
 });
 
