@@ -35,9 +35,8 @@ client.on('messageCreate', async (message) => {
   try {
     await message.channel.sendTyping();
 
-    // Probamos con el identificador estándar del modelo Flash
     const model = genAI.getGenerativeModel({ 
-      model: 'gemini-1.5-flash',
+      model: 'gemini-2.5-flash',
       systemInstruction: SYSTEM_PROMPT
     });
 
@@ -48,11 +47,11 @@ client.on('messageCreate', async (message) => {
       await message.reply(replyText);
     }
   } catch (error) {
-    console.error('❌ Error al generar la respuesta de Gemini:', error);
+    console.error('❌ Error detallado al generar respuesta:', error);
   }
 });
 
-// Servidor HTTP para el Health Check de Render
+// Servidor HTTP simple para el Health Check de Render
 http.createServer((req, res) => res.end('Nuha está viva')).listen(process.env.PORT || 3000);
 
 client.login(process.env.DISCORD_TOKEN);
