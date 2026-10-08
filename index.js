@@ -53,3 +53,5 @@ client.on('messageCreate', async (message) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+import http from 'http';
+http.createServer((req, res) => res.end('Nuha está viva')).listen(process.env.PORT || 3000);
