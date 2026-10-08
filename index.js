@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits } from 'discord.js';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import http from 'http';
 import 'dotenv/config';
 
 const client = new Client({
@@ -10,7 +11,7 @@ const client = new Client({
   ],
 });
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const SYSTEM_PROMPT = `Eres Nuha, una participante más en un servidor de Discord.
 
@@ -34,15 +35,13 @@ client.on('messageCreate', async (message) => {
   try {
     await message.channel.sendTyping();
 
-    const response = await ai.models.generateContent({
+    const model = genAI.getGenerativeModel({ 
       model: 'gemini-2.5-flash',
-      contents: message.content,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-      },
+      systemInstruction: SYSTEM_PROMPT
     });
 
-    const replyText = response.text;
+    const result = await model.generateContent(message.content);
+    const replyText = result.response.text();
 
     if (replyText) {
       await message.reply(replyText);
@@ -52,6 +51,7 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-client.login(process.env.DISCORD_TOKEN);
-import http from 'http';
+// Servidor HTTP simple para el Health Check de Render
 http.createServer((req, res) => res.end('Nuha está viva')).listen(process.env.PORT || 3000);
+
+client.login(process.env.DISCORD_TOKEN);
