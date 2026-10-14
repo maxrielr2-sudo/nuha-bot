@@ -21,6 +21,10 @@ const client = new Client({
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// ========================================
+// PERSONALIDAD DE NUHA
+// ========================================
+
 const SYSTEM_PROMPT = `Eres Nuha, una participante más en un servidor de Discord sobre Doraemon.
 
 Tu personalidad:
@@ -34,6 +38,10 @@ REGLAS DE FORMATO Y LONGITUD (ESTRICTAS):
 - No hagas análisis profundos ni explicaciones enciclopédicas a menos que te lo pidan explícitamente.
 - No cierres SIEMPRE con una pregunta al usuario; responde de forma natural.`;
 
+// ========================================
+// MODELOS Y TIEMPO LÍMITE
+// ========================================
+
 const MODELS_TO_TRY = [
   'gemini-3.1-flash-lite',
   'gemini-3.5-flash-lite',
@@ -41,51 +49,14 @@ const MODELS_TO_TRY = [
   'gemini-2.5-flash',
 ];
 
-// Tiempo máximo de espera por petición a Gemini.
 const GEMINI_TIMEOUT_MS = 30000;
 
-// Tiempo para registrar si Discord tarda en completar la conexión.
-const DISCORD_CONNECT_DIAGNOSTIC_MS = 20000;
-
 // ========================================
-// EVENTOS DE CONEXIÓN DE DISCORD
+// EVENTO: NUHA ESTÁ EN LÍNEA
 // ========================================
-
-client.on('debug', (info) => {
-  console.log(`🔍 Discord debug: ${info}`);
-});
-
-client.on('warn', (info) => {
-  console.warn(`⚠️ Discord warning: ${info}`);
-});
 
 client.once('ready', () => {
   console.log(`🤖 Nuha está en línea como ${client.user.tag}`);
-});
-
-client.on('shardReady', (shardId) => {
-  console.log(`✅ Shard ${shardId} conectado a Discord.`);
-});
-
-client.on('error', (error) => {
-  console.error('❌ Error del cliente Discord:', error);
-});
-
-client.on('shardError', (error, shardId) => {
-  console.error(
-    `❌ Error de conexión con Discord en el shard ${shardId}:`,
-    error
-  );
-});
-
-client.on('shardDisconnect', (event, shardId) => {
-  console.error(
-    `🔌 Shard ${shardId} desconectado. Código: ${event.code}`
-  );
-});
-
-client.on('shardReconnecting', (shardId) => {
-  console.log(`🔄 Reconectando shard ${shardId}...`);
 });
 
 // ========================================
@@ -180,7 +151,10 @@ client.on('messageCreate', async (message) => {
       }
     }
 
-    // Limpiar la mención del mensaje actual.
+    // ========================================
+    // PREPARAR EL MENSAJE ACTUAL
+    // ========================================
+
     const cleanPrompt = message.content
       .replace(
         new RegExp(`<@!?${client.user.id}>`, 'g'),
@@ -192,6 +166,7 @@ client.on('messageCreate', async (message) => {
       console.log(
         '⏭️ La mención no contiene texto después de limpiarla.'
       );
+
       return;
     }
 
@@ -220,11 +195,14 @@ client.on('messageCreate', async (message) => {
         let timeoutId;
 
         try {
+          // Limitar el tiempo de espera de cada petición.
           const timeoutPromise = new Promise((_, reject) => {
             timeoutId = setTimeout(() => {
               reject(
                 new Error(
-                  `Tiempo límite de ${GEMINI_TIMEOUT_MS / 1000} segundos superado`
+                  `Tiempo límite de ${
+                    GEMINI_TIMEOUT_MS / 1000
+                  } segundos superado`
                 )
               );
             }, GEMINI_TIMEOUT_MS);
@@ -244,6 +222,7 @@ client.on('messageCreate', async (message) => {
           console.log(
             `✅ Gemini respondió usando: ${modelName}`
           );
+
           break;
         }
 
@@ -309,52 +288,9 @@ http
 // INICIAR SESIÓN EN DISCORD
 // ========================================
 
-console.log('🧪 Comprobando conexión HTTPS con Discord...');
-
-fetch('https://discord.com/api/v10/gateway')
-  .then(async (response) => {
-    console.log(
-      `🌐 API de Discord respondió con estado HTTP ${response.status}`
-    );
-
-    const data = await response.json();
-
-    console.log(
-      '🔌 Gateway anunciado por Discord:',
-      data.url || 'No se recibió una URL'
-    );
-  })
-  .catch((error) => {
-    console.error(
-      '❌ No se pudo contactar con la API de Discord:',
-      error.cause || error.message || error
-    );
-  });
-
-console.log('🔑 Intentando iniciar sesión en Discord...');
-
-const diagnosticTimer = setTimeout(() => {
+client.login(process.env.DISCORD_TOKEN).catch((error) => {
   console.error(
-    '⏰ Han pasado 20 segundos y Discord aún no ha confirmado que Nuha esté lista.'
+    '❌ Error al iniciar sesión en Discord:',
+    error
   );
-  console.error(
-    '🔎 Estado actual del cliente:',
-    client.isReady() ? 'READY' : 'NO READY'
-  );
-}, DISCORD_CONNECT_DIAGNOSTIC_MS);
-
-client.login(process.env.DISCORD_TOKEN)
-  .then(() => {
-    console.log(
-      '✅ La promesa de inicio de sesión se ha resuelto.'
-    );
-  })
-  .catch((error) => {
-    console.error(
-      '❌ Error al iniciar sesión en Discord:',
-      error
-    );
-  })
-  .finally(() => {
-    clearTimeout(diagnosticTimer);
-  });
+});
