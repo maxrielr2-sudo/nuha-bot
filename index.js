@@ -51,6 +51,14 @@ const DISCORD_CONNECT_DIAGNOSTIC_MS = 20000;
 // EVENTOS DE CONEXIÓN DE DISCORD
 // ========================================
 
+client.on('debug', (info) => {
+  console.log(`🔍 Discord debug: ${info}`);
+});
+
+client.on('warn', (info) => {
+  console.warn(`⚠️ Discord warning: ${info}`);
+});
+
 client.once('ready', () => {
   console.log(`🤖 Nuha está en línea como ${client.user.tag}`);
 });
