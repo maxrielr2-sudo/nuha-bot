@@ -44,12 +44,40 @@ const MODELS_TO_TRY = [
 // Tiempo máximo de espera por petición a Gemini.
 const GEMINI_TIMEOUT_MS = 30000;
 
+// Tiempo para registrar si Discord tarda en completar la conexión.
+const DISCORD_CONNECT_DIAGNOSTIC_MS = 20000;
+
 // ========================================
-// EVENTO: NUHA ESTÁ EN LÍNEA
+// EVENTOS DE CONEXIÓN DE DISCORD
 // ========================================
 
 client.once('ready', () => {
   console.log(`🤖 Nuha está en línea como ${client.user.tag}`);
+});
+
+client.on('shardReady', (shardId) => {
+  console.log(`✅ Shard ${shardId} conectado a Discord.`);
+});
+
+client.on('error', (error) => {
+  console.error('❌ Error del cliente Discord:', error);
+});
+
+client.on('shardError', (error, shardId) => {
+  console.error(
+    `❌ Error de conexión con Discord en el shard ${shardId}:`,
+    error
+  );
+});
+
+client.on('shardDisconnect', (event, shardId) => {
+  console.error(
+    `🔌 Shard ${shardId} desconectado. Código: ${event.code}`
+  );
+});
+
+client.on('shardReconnecting', (shardId) => {
+  console.log(`🔄 Reconectando shard ${shardId}...`);
 });
 
 // ========================================
@@ -95,53 +123,54 @@ client.on('messageCreate', async (message) => {
       .reverse();
 
     const history = sortedMessages
-  .map((msg) => {
-    const role =
-      msg.author.id === client.user.id ? 'model' : 'user';
+      .map((msg) => {
+        const role =
+          msg.author.id === client.user.id ? 'model' : 'user';
 
-    const cleanContent = msg.content
-      .replace(
-        new RegExp(`<@!?${client.user.id}>`, 'g'),
-        ''
-      )
-      .trim();
+        const cleanContent = msg.content
+          .replace(
+            new RegExp(`<@!?${client.user.id}>`, 'g'),
+            ''
+          )
+          .trim();
 
-    // Ignorar mensajes que se quedan vacíos tras limpiar menciones.
-    if (!cleanContent) return null;
+        // Ignorar mensajes vacíos después de limpiar menciones.
+        if (!cleanContent) {
+          return null;
+        }
 
-    return {
-      role,
-      parts: [
-        {
-          text: `${msg.author.username}: ${cleanContent}`,
-        },
-      ],
-    };
-  })
-  .filter(Boolean);
+        return {
+          role,
+          parts: [
+            {
+              text: `${msg.author.username}: ${cleanContent}`,
+            },
+          ],
+        };
+      })
+      .filter(Boolean);
 
-// Gemini requiere que el historial comience con un mensaje user.
-// Si empieza con respuestas del modelo, descartarlas hasta el primer user.
-while (history.length > 0 && history[0].role !== 'user') {
-  history.shift();
-}
+    // Gemini requiere que el historial comience con user.
+    while (history.length > 0 && history[0].role !== 'user') {
+      history.shift();
+    }
 
-// Gemini también espera que los mensajes alternen entre user y model.
-// Si hay varios mensajes consecutivos del mismo rol, los agrupamos.
-const normalizedHistory = [];
+    // Agrupar mensajes consecutivos del mismo rol.
+    const normalizedHistory = [];
 
-for (const item of history) {
-  const previous = normalizedHistory[normalizedHistory.length - 1];
+    for (const item of history) {
+      const previous =
+        normalizedHistory[normalizedHistory.length - 1];
 
-  if (previous && previous.role === item.role) {
-    previous.parts[0].text += '\n' + item.parts[0].text;
-  } else {
-    normalizedHistory.push({
-      role: item.role,
-      parts: item.parts.map((part) => ({ ...part })),
-    });
-  }
-}
+      if (previous && previous.role === item.role) {
+        previous.parts[0].text += '\n' + item.parts[0].text;
+      } else {
+        normalizedHistory.push({
+          role: item.role,
+          parts: item.parts.map((part) => ({ ...part })),
+        });
+      }
+    }
 
     // Limpiar la mención del mensaje actual.
     const cleanPrompt = message.content
@@ -177,13 +206,12 @@ for (const item of history) {
         });
 
         const chat = model.startChat({
-  history: normalizedHistory,
-});
+          history: normalizedHistory,
+        });
 
         let timeoutId;
 
         try {
-          // Crear una petición con límite de espera.
           const timeoutPromise = new Promise((_, reject) => {
             timeoutId = setTimeout(() => {
               reject(
@@ -201,7 +229,6 @@ for (const item of history) {
 
           replyText = result.response.text();
         } finally {
-          // Limpiar el temporizador cuando termina la espera.
           clearTimeout(timeoutId);
         }
 
@@ -274,30 +301,30 @@ http
 // INICIAR SESIÓN EN DISCORD
 // ========================================
 
-client.on('error', (error) => {
-  console.error('❌ Error del cliente Discord:', error);
-});
-
-client.on('shardError', (error) => {
-  console.error('❌ Error de conexión con Discord:', error);
-});
-
-client.on('shardDisconnect', (event, shardId) => {
-  console.error(
-    `🔌 Shard ${shardId} desconectado. Código: ${event.code}`
-  );
-});
-
-client.on('shardReconnecting', (shardId) => {
-  console.log(`🔄 Reconectando shard ${shardId}...`);
-});
-
 console.log('🔑 Intentando iniciar sesión en Discord...');
+
+const diagnosticTimer = setTimeout(() => {
+  console.error(
+    '⏰ Han pasado 20 segundos y Discord aún no ha confirmado que Nuha esté lista.'
+  );
+  console.error(
+    '🔎 Estado actual del cliente:',
+    client.isReady() ? 'READY' : 'NO READY'
+  );
+}, DISCORD_CONNECT_DIAGNOSTIC_MS);
 
 client.login(process.env.DISCORD_TOKEN)
   .then(() => {
-    console.log('✅ Solicitud de inicio de sesión completada.');
+    console.log(
+      '✅ La promesa de inicio de sesión se ha resuelto.'
+    );
   })
   .catch((error) => {
-    console.error('❌ Error al iniciar sesión en Discord:', error);
+    console.error(
+      '❌ Error al iniciar sesión en Discord:',
+      error
+    );
+  })
+  .finally(() => {
+    clearTimeout(diagnosticTimer);
   });
