@@ -43,10 +43,11 @@ REGLAS DE FORMATO Y LONGITUD (ESTRICTAS):
 // ========================================
 
 const MODELS_TO_TRY = [
-  'gemini-3.1-flash-lite',
+  'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
+  'gemini-flash-latest',
 ];
 
 const GEMINI_TIMEOUT_MS = 30000;
