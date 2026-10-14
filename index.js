@@ -284,12 +284,12 @@ client.on('shardError', (error) => {
 
 client.on('shardDisconnect', (event, shardId) => {
   console.error(
-    🔌 Shard ${shardId} desconectado. Código: ${event.code}
+    `🔌 Shard ${shardId} desconectado. Código: ${event.code}`
   );
 });
 
 client.on('shardReconnecting', (shardId) => {
-  console.log(🔄 Reconectando shard ${shardId}...);
+  console.log(`🔄 Reconectando shard ${shardId}...`);
 });
 
 console.log('🔑 Intentando iniciar sesión en Discord...');
