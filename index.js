@@ -274,9 +274,30 @@ http
 // INICIAR SESIÓN EN DISCORD
 // ========================================
 
-client.login(process.env.DISCORD_TOKEN).catch((error) => {
+client.on('error', (error) => {
+  console.error('❌ Error del cliente Discord:', error);
+});
+
+client.on('shardError', (error) => {
+  console.error('❌ Error de conexión con Discord:', error);
+});
+
+client.on('shardDisconnect', (event, shardId) => {
   console.error(
-    '❌ Error al iniciar sesión en Discord:',
-    error
+    🔌 Shard ${shardId} desconectado. Código: ${event.code}
   );
 });
+
+client.on('shardReconnecting', (shardId) => {
+  console.log(🔄 Reconectando shard ${shardId}...);
+});
+
+console.log('🔑 Intentando iniciar sesión en Discord...');
+
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => {
+    console.log('✅ Solicitud de inicio de sesión completada.');
+  })
+  .catch((error) => {
+    console.error('❌ Error al iniciar sesión en Discord:', error);
+  });
