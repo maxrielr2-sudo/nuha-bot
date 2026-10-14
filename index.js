@@ -95,26 +95,54 @@ client.on('messageCreate', async (message) => {
       .filter((msg) => msg.id !== message.id)
       .reverse();
 
-    const history = sortedMessages.map((msg) => {
-      const role =
-        msg.author.id === client.user.id ? 'model' : 'user';
+    const history = sortedMessages
+  .map((msg) => {
+    const role =
+      msg.author.id === client.user.id ? 'model' : 'user';
 
-      const cleanContent = msg.content
-        .replace(
-          new RegExp(`<@!?${client.user.id}>`, 'g'),
-          ''
-        )
-        .trim();
+    const cleanContent = msg.content
+      .replace(
+        new RegExp(`<@!?${client.user.id}>`, 'g'),
+        ''
+      )
+      .trim();
 
-      return {
-        role,
-        parts: [
-          {
-            text: `${msg.author.username}: ${cleanContent}`,
-          },
-        ],
-      };
+    // Ignorar mensajes que se quedan vacíos tras limpiar menciones.
+    if (!cleanContent) return null;
+
+    return {
+      role,
+      parts: [
+        {
+          text: `${msg.author.username}: ${cleanContent}`,
+        },
+      ],
+    };
+  })
+  .filter(Boolean);
+
+// Gemini requiere que el historial comience con un mensaje user.
+// Si empieza con respuestas del modelo, descartarlas hasta el primer user.
+while (history.length > 0 && history[0].role !== 'user') {
+  history.shift();
+}
+
+// Gemini también espera que los mensajes alternen entre user y model.
+// Si hay varios mensajes consecutivos del mismo rol, los agrupamos.
+const normalizedHistory = [];
+
+for (const item of history) {
+  const previous = normalizedHistory[normalizedHistory.length - 1];
+
+  if (previous && previous.role === item.role) {
+    previous.parts[0].text += '\n' + item.parts[0].text;
+  } else {
+    normalizedHistory.push({
+      role: item.role,
+      parts: item.parts.map((part) => ({ ...part })),
     });
+  }
+}
 
     // Limpiar la mención del mensaje actual.
     const cleanPrompt = message.content
@@ -150,8 +178,8 @@ client.on('messageCreate', async (message) => {
         });
 
         const chat = model.startChat({
-          history,
-        });
+  history: normalizedHistory,
+});
 
         let timeoutId;
 
