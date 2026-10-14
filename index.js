@@ -3,6 +3,10 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import http from 'http';
 import 'dotenv/config';
 
+// ========================================
+// CONFIGURACIÓN DE DISCORD
+// ========================================
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -10,6 +14,10 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
   ],
 });
+
+// ========================================
+// CONFIGURACIÓN DE GEMINI
+// ========================================
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -31,76 +39,217 @@ const MODELS_TO_TRY = [
   'gemini-3.5-flash-lite',
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-flash-latest'
+  'gemini-flash-latest',
 ];
+
+// Tiempo máximo de espera por petición a Gemini.
+const GEMINI_TIMEOUT_MS = 30000;
+
+// ========================================
+// EVENTO: NUHA ESTÁ EN LÍNEA
+// ========================================
 
 client.once('ready', () => {
   console.log(`🤖 Nuha está en línea como ${client.user.tag}`);
 });
 
-client.on('messageCreate', async (message) => {
-  if (message.author.bot || !message.content) return;
+// ========================================
+// EVENTO: RECEPCIÓN DE MENSAJES
+// ========================================
 
-  // Solo responder si mencionan a @Nuha
-  if (!message.mentions.has(client.user)) return;
+client.on('messageCreate', async (message) => {
+  console.log(
+    `📩 Mensaje recibido: autor=${message.author.tag}, ` +
+    `bot=${message.author.bot}, canal=${message.channel.id}`
+  );
+
+  // Ignorar mensajes de bots y mensajes vacíos.
+  if (message.author.bot || !message.content) {
+    return;
+  }
+
+  // Solo responder cuando mencionen a Nuha.
+  if (!client.user || !message.mentions.has(client.user)) {
+    return;
+  }
+
+  console.log('🎯 Mención de Nuha detectada.');
 
   try {
+    // Mostrar que Nuha está escribiendo.
     await message.channel.sendTyping();
 
-    // 1. Obtener los últimos 6 mensajes del canal para construir el contexto
-    const rawMessages = await message.channel.messages.fetch({ limit: 6 });
-    const sortedMessages = Array.from(rawMessages.values()).reverse();
+    console.log('⌨️ Indicador de escritura enviado.');
 
-    // 2. Formatear el historial para enviárselo a Gemini
+    // ========================================
+    // PREPARAR EL HISTORIAL
+    // ========================================
+
+    console.log('📚 Recuperando historial del canal...');
+
+    const rawMessages = await message.channel.messages.fetch({
+      limit: 6,
+    });
+
+    const sortedMessages = Array.from(rawMessages.values())
+      .filter((msg) => msg.id !== message.id)
+      .reverse();
+
     const history = sortedMessages.map((msg) => {
-      const role = msg.author.id === client.user.id ? 'model' : 'user';
-      // Limpiar menciones para no ensuciar el texto
-      const cleanContent = msg.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
+      const role =
+        msg.author.id === client.user.id ? 'model' : 'user';
+
+      const cleanContent = msg.content
+        .replace(
+          new RegExp(`<@!?${client.user.id}>`, 'g'),
+          ''
+        )
+        .trim();
+
       return {
-        role: role,
-        parts: [{ text: `${msg.author.username}: ${cleanContent}` }],
+        role,
+        parts: [
+          {
+            text: `${msg.author.username}: ${cleanContent}`,
+          },
+        ],
       };
     });
 
-    // 3. El último mensaje del usuario
-    const cleanPrompt = message.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim();
-    if (!cleanPrompt) return;
+    // Limpiar la mención del mensaje actual.
+    const cleanPrompt = message.content
+      .replace(
+        new RegExp(`<@!?${client.user.id}>`, 'g'),
+        ''
+      )
+      .trim();
+
+    if (!cleanPrompt) {
+      console.log(
+        '⏭️ La mención no contiene texto después de limpiarla.'
+      );
+      return;
+    }
+
+    console.log('✅ Historial preparado.');
+    console.log('🧠 Comenzando las peticiones a Gemini...');
+
+    // ========================================
+    // CONSULTAR LOS MODELOS
+    // ========================================
 
     let replyText = '';
 
     for (const modelName of MODELS_TO_TRY) {
+      console.log(`🔄 Probando modelo: ${modelName}`);
+
       try {
-        const model = genAI.getGenerativeModel({ 
+        const model = genAI.getGenerativeModel({
           model: modelName,
-          systemInstruction: SYSTEM_PROMPT
+          systemInstruction: SYSTEM_PROMPT,
         });
 
-        // Iniciamos el chat pasándole el historial de los últimos mensajes
         const chat = model.startChat({
-          history: history.slice(0, -1), // Pasamos los mensajes anteriores
+          history,
         });
 
-        const result = await chat.sendMessage(cleanPrompt);
-        replyText = result.response.text();
+        let timeoutId;
+
+        try {
+          // Crear una petición con límite de espera.
+          const timeoutPromise = new Promise((_, reject) => {
+            timeoutId = setTimeout(() => {
+              reject(
+                new Error(
+                  `Tiempo límite de ${GEMINI_TIMEOUT_MS / 1000} segundos superado`
+                )
+              );
+            }, GEMINI_TIMEOUT_MS);
+          });
+
+          const result = await Promise.race([
+            chat.sendMessage(cleanPrompt),
+            timeoutPromise,
+          ]);
+
+          replyText = result.response.text();
+        } finally {
+          // Limpiar el temporizador cuando termina la espera.
+          clearTimeout(timeoutId);
+        }
 
         if (replyText) {
-          console.log(`✅ Respondido con éxito usando: ${modelName}`);
+          console.log(
+            `✅ Gemini respondió usando: ${modelName}`
+          );
           break;
         }
-      } catch (err) {
-        console.warn(`⚠️ Modelo ${modelName} falló en chat, probando siguiente...`, err.message);
+
+        console.warn(
+          `⚠️ ${modelName} devolvió una respuesta vacía.`
+        );
+      } catch (error) {
+        console.error(
+          `❌ Falló el modelo ${modelName}:`,
+          error.message
+        );
       }
     }
 
-    if (replyText) {
-      await message.reply(replyText);
-    }
+    // ========================================
+    // ENVIAR LA RESPUESTA A DISCORD
+    // ========================================
 
+    if (replyText) {
+      console.log('📤 Enviando respuesta a Discord...');
+
+      await message.reply(replyText);
+
+      console.log('✅ Respuesta enviada correctamente.');
+    } else {
+      console.error(
+        '❌ Ningún modelo produjo una respuesta válida.'
+      );
+
+      await message.reply(
+        'Se me ha atascado un engranaje. Dame un momento y vuelve a intentarlo. 😵‍💫'
+      );
+
+      console.log(
+        '📤 Enviado mensaje indicando que hubo un problema.'
+      );
+    }
   } catch (error) {
-    console.error('❌ Error general al procesar el mensaje:', error);
+    console.error(
+      '❌ Error general al procesar el mensaje:',
+      error
+    );
   }
 });
 
-http.createServer((req, res) => res.end('Nuha está viva')).listen(process.env.PORT || 3000);
+// ========================================
+// SERVIDOR HTTP PARA EL ALOJAMIENTO
+// ========================================
 
-client.login(process.env.DISCORD_TOKEN);
+http
+  .createServer((req, res) => {
+    res.writeHead(200, {
+      'Content-Type': 'text/plain; charset=utf-8',
+    });
+
+    res.end('Nuha está viva');
+  })
+  .listen(process.env.PORT || 3000, () => {
+    console.log('🌐 Servidor HTTP iniciado.');
+  });
+
+// ========================================
+// INICIAR SESIÓN EN DISCORD
+// ========================================
+
+client.login(process.env.DISCORD_TOKEN).catch((error) => {
+  console.error(
+    '❌ Error al iniciar sesión en Discord:',
+    error
+  );
+});
