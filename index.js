@@ -309,6 +309,28 @@ http
 // INICIAR SESIÓN EN DISCORD
 // ========================================
 
+console.log('🧪 Comprobando conexión HTTPS con Discord...');
+
+fetch('https://discord.com/api/v10/gateway')
+  .then(async (response) => {
+    console.log(
+      `🌐 API de Discord respondió con estado HTTP ${response.status}`
+    );
+
+    const data = await response.json();
+
+    console.log(
+      '🔌 Gateway anunciado por Discord:',
+      data.url || 'No se recibió una URL'
+    );
+  })
+  .catch((error) => {
+    console.error(
+      '❌ No se pudo contactar con la API de Discord:',
+      error.cause || error.message || error
+    );
+  });
+
 console.log('🔑 Intentando iniciar sesión en Discord...');
 
 const diagnosticTimer = setTimeout(() => {
