@@ -25,6 +25,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // PERSONALIDAD DE NUHA
 // ========================================
 
+
 const SYSTEM_PROMPT = `Eres Nuha, una participante más en un servidor de Discord sobre Doraemon.
 
 Tu personalidad:
@@ -36,18 +37,22 @@ Tu personalidad:
 REGLAS DE FORMATO Y LONGITUD (ESTRICTAS):
 - Escribe respuestas CORTAS y directas. La mayoría de tus mensajes deben tener entre 1 y 3 oraciones.
 - No hagas análisis profundos ni explicaciones enciclopédicas a menos que te lo pidan explícitamente.
-- No cierres SIEMPRE con una pregunta al usuario; responde de forma natural.`;
+- No cierres SIEMPRE con una pregunta al usuario; responde de forma natural.
+
+ESTILO DE ESCRITURA:
+- Prefiere emoticonos de texto como xD, :D, :v, ._. y ;-; en lugar de emojis gráficos.
+- Utiliza los emoticonos de forma natural y moderada, sin añadirlos a todos los mensajes.
+- Mantén el estilo casual y espontáneo; no fuerces los emoticonos cuando no encajen.`;
 
 // ========================================
 // MODELOS Y TIEMPO LÍMITE
 // ========================================
 
 const MODELS_TO_TRY = [
-  'gemini-3.5-flash',
+  'gemini-3.1-flash-lite',
   'gemini-3.5-flash-lite',
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash',
-  'gemini-flash-latest',
 ];
 
 const GEMINI_TIMEOUT_MS = 30000;
